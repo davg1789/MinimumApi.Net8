@@ -1,2 +1,5 @@
-Minimum Api .Net 8 example. C# and Entity Framework Core.
-Read a database. Get endpoint
+Minimum Api .Net 8 example. Read a database. Get endpoint
+- C#
+- Entity Framework Core.
+- .NET 8
+
