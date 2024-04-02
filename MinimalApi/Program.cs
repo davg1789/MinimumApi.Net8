@@ -1,5 +1,7 @@
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using MinimalApi.Context;
+using MinimalApi.Middlewares;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -11,7 +13,20 @@ builder.Services.AddOutputCache(opt =>
     opt.DefaultExpirationTimeSpan = TimeSpan.FromSeconds(30);     
 });
 builder.Services.AddSwaggerGen();
-builder.Services.AddDbContext<LocationContext>(options => options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+builder.Services.AddAuthorization();
+
+var projectRootPath = Directory.GetCurrentDirectory();
+//Ideal to keep out of the project
+builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(projectRootPath, "DataProtection-Keys")));
+
+//Get encrypted connection string
+var serviceProvider = builder.Services.BuildServiceProvider();
+var protectorProvider = serviceProvider.GetRequiredService<IDataProtectionProvider>();
+var protector = protectorProvider.CreateProtector("MinimalApi.ConnectionString");
+var encryptedConnectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+var decryptedConnectionString = protector.Unprotect(encryptedConnectionString);
+builder.Services.AddDbContext<LocationContext>(options => options.UseSqlServer(decryptedConnectionString));
 
 var app = builder.Build();
 
@@ -22,11 +37,14 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.UseMiddleware<ApiKeyAuthenticationMiddleware>();
+app.UseAuthorization();
+
 app.UseHttpsRedirection();
 app.UseOutputCache();
 
 app.MapGet("/location", async (LocationContext context) =>
-await context.Location.ToListAsync())
+    await context.Location.ToListAsync())
 .WithName("location")
 .WithOpenApi()
 .CacheOutput();
